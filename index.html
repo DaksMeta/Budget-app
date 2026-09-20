@@ -369,10 +369,14 @@ input[type=file]{display:none;}
 
 <!-- DASHBOARD -->
 <div class="view" id="view-dashboard">
+  <div class="type-toggle" style="max-width:200px;margin:0 auto 4px;">
+    <button type="button" class="period-btn active" data-period="month">Month</button>
+    <button type="button" class="period-btn" data-period="year">Year</button>
+  </div>
   <div class="month-switch">
-    <button id="prevMonth" aria-label="Previous month">‹</button>
+    <button id="prevMonth" aria-label="Previous period">‹</button>
     <div class="label" id="monthLabel">—</div>
-    <button id="nextMonth" aria-label="Next month">›</button>
+    <button id="nextMonth" aria-label="Next period">›</button>
   </div>
 
   <div class="hero" id="heroCard">
@@ -400,7 +404,7 @@ input[type=file]{display:none;}
   </div>
 
   <div class="section">
-    <div class="section-head"><h2>Budget by category</h2><span class="hint" id="budgetHint"></span></div>
+    <div class="section-head"><h2 id="budgetSectionTitle">Budget by category</h2><span class="hint" id="budgetHint"></span></div>
     <div class="card-list" id="budgetList"></div>
   </div>
 
@@ -673,17 +677,26 @@ function txForMonth(d){
   const key = monthKey(d);
   return data.transactions.filter(t => txMonthKey(t) === key);
 }
+function txForYearPeriod(d){
+  const y = String(d.getFullYear());
+  return data.transactions.filter(t => t.date.slice(0,4) === y);
+}
+function txForPeriod(d, period){
+  return period === "year" ? txForYearPeriod(d) : txForMonth(d);
+}
 
-function gradeBudget(monthTx){
+function gradeBudget(periodTx, period){
+  const mult = period === "year" ? 12 : 1;
   const cats = data.categories.filter(c => c.limit !== null && c.limit !== "" && Number(c.limit) > 0);
-  if(cats.length === 0) return {score:null, spendByCat:{}, totalLimit:0, totalSpent:0};
+  if(cats.length === 0) return {score:null, totalLimit:0, totalSpent:0, catBreakdown:[]};
   const spendByCat = {};
-  monthTx.filter(t=>t.type==="expense").forEach(t=>{
+  periodTx.filter(t=>t.type==="expense").forEach(t=>{
     spendByCat[t.category] = (spendByCat[t.category]||0) + Number(t.amount);
   });
   let weightedSum = 0, weightTotal = 0, totalLimit=0, totalSpent=0;
+  const catBreakdown = [];
   cats.forEach(c=>{
-    const limit = Number(c.limit);
+    const limit = Number(c.limit) * mult;
     const spent = spendByCat[c.name] || 0;
     totalLimit += limit; totalSpent += spent;
     const ratio = spent/limit;
@@ -695,9 +708,10 @@ function gradeBudget(monthTx){
     }
     weightedSum += catScore * limit;
     weightTotal += limit;
+    catBreakdown.push({name: c.name, limit, spent});
   });
   const score = weightTotal > 0 ? weightedSum/weightTotal : null;
-  return {score, spendByCat, totalLimit, totalSpent};
+  return {score, totalLimit, totalSpent, catBreakdown};
 }
 
 function gradeSavings(refDate){
@@ -732,20 +746,25 @@ function gradeSavings(refDate){
   return {score: n ? total/n : null, perGoal};
 }
 
-function gradeIncome(monthTx){
-  const target = Number(data.incomeTarget)||0;
+function gradeIncome(periodTx, period){
+  const mult = period === "year" ? 12 : 1;
+  const target = (Number(data.incomeTarget)||0) * mult;
   if(target <= 0) return {score:null, actual:0, target:0};
-  const actual = monthTx.filter(t=>t.type==="income").reduce((s,t)=>s+Number(t.amount),0);
+  const actual = periodTx.filter(t=>t.type==="income").reduce((s,t)=>s+Number(t.amount),0);
   const ratio = actual/target;
   const score = Math.max(0, Math.min(100, ratio*100));
   return {score, actual, target};
 }
 
-function computeGrades(d){
-  const monthTx = txForMonth(d);
-  const budget = gradeBudget(monthTx);
-  const savings = gradeSavings(d);
-  const income = gradeIncome(monthTx);
+function computeGrades(d, period){
+  period = period || "month";
+  const periodTx = txForPeriod(d, period);
+  const budget = gradeBudget(periodTx, period);
+  const savingsRefDate = period === "year"
+    ? new Date(Math.min(now.getTime(), new Date(d.getFullYear(), 11, 31).getTime()))
+    : d;
+  const savings = gradeSavings(savingsRefDate);
+  const income = gradeIncome(periodTx, period);
   const parts = [
     {score: budget.score, w: Number(data.weights.budget)},
     {score: savings.score, w: Number(data.weights.savings)},
@@ -756,15 +775,23 @@ function computeGrades(d){
     const wsum = parts.reduce((s,p)=>s+p.w,0);
     overall = wsum > 0 ? parts.reduce((s,p)=>s+p.score*p.w,0)/wsum : parts.reduce((s,p)=>s+p.score,0)/parts.length;
   }
-  return {budget, savings, income, overall, monthTx};
+  return {budget, savings, income, overall, periodTx};
 }
 
 /* ---------- rendering: dashboard ---------- */
+let dashPeriod = "month";
 function renderDashboard(){
-  document.getElementById("monthLabel").textContent = monthLabel(viewMonth);
-  document.getElementById("nextMonth").style.visibility = isFutureMonth(new Date(viewMonth.getFullYear(), viewMonth.getMonth()+1, 1)) ? "hidden" : "visible";
+  if(dashPeriod === "year"){
+    document.getElementById("monthLabel").textContent = String(viewMonth.getFullYear());
+    document.getElementById("nextMonth").style.visibility = viewMonth.getFullYear() >= now.getFullYear() ? "hidden" : "visible";
+  } else {
+    document.getElementById("monthLabel").textContent = monthLabel(viewMonth);
+    document.getElementById("nextMonth").style.visibility = isFutureMonth(new Date(viewMonth.getFullYear(), viewMonth.getMonth()+1, 1)) ? "hidden" : "visible";
+  }
 
-  const g = computeGrades(viewMonth);
+  document.getElementById("budgetSectionTitle").textContent = dashPeriod === "year" ? "Annual budget by category" : "Budget by category";
+
+  const g = computeGrades(viewMonth, dashPeriod);
 
   const hero = document.getElementById("heroCard");
   const ov = letterFromScore(g.overall);
@@ -781,13 +808,14 @@ function renderDashboard(){
 }
 
 function overallNoteText(g){
+  const period = dashPeriod === "year" ? "year" : "month";
   const have = [g.budget.score!==null, g.savings.score!==null, g.income.score!==null].filter(Boolean).length;
   if(have===0) return "Add a budget, a goal, or some transactions to get graded.";
-  if(g.overall >= 90) return "Right where you want to be this month.";
-  if(g.overall >= 80) return "Solid month, a little room to tighten up.";
+  if(g.overall >= 90) return "Right where you want to be this " + period + ".";
+  if(g.overall >= 80) return "Solid " + period + ", a little room to tighten up.";
   if(g.overall >= 70) return "Off pace in a few places — worth a look.";
-  if(g.overall >= 60) return "Several areas need attention this month.";
-  return "This month is well off track. Start with the lowest score below.";
+  if(g.overall >= 60) return "Several areas need attention this " + period + ".";
+  return "This " + period + " is well off track. Start with the lowest score below.";
 }
 function fillSubgrade(id, score, note){
   const el = document.getElementById(id);
@@ -812,16 +840,15 @@ function incomeNote(i){
 function renderBudgetList(b){
   const wrap = document.getElementById("budgetList");
   const hint = document.getElementById("budgetHint");
-  const cats = data.categories.filter(c=>c.limit!==null && c.limit!=="" && Number(c.limit)>0);
-  if(cats.length===0){
+  if(!b.catBreakdown || b.catBreakdown.length===0){
     hint.textContent = "";
     wrap.innerHTML = '<div class="empty-note">No budgeted categories yet. <button onclick="window.__goSetup()">Set one up</button></div>';
     return;
   }
   hint.textContent = fmtMoney(b.totalSpent) + " of " + fmtMoney(b.totalLimit);
-  wrap.innerHTML = cats.map(c=>{
-    const limit = Number(c.limit);
-    const spent = b.spendByCat[c.name] || 0;
+  wrap.innerHTML = b.catBreakdown.map(c=>{
+    const limit = c.limit;
+    const spent = c.spent;
     const pct = Math.min(100, (spent/limit)*100);
     const over = spent > limit;
     const barCls = over ? "over" : (pct>85 ? "warn" : "");
@@ -1644,11 +1671,31 @@ document.querySelectorAll(".tab-btn").forEach(btn=>{
 });
 
 /* month nav */
-document.getElementById("prevMonth").addEventListener("click",()=>{ viewMonth = new Date(viewMonth.getFullYear(), viewMonth.getMonth()-1, 1); renderDashboard(); });
+document.getElementById("prevMonth").addEventListener("click",()=>{
+  if(dashPeriod === "year"){
+    viewMonth = new Date(viewMonth.getFullYear()-1, viewMonth.getMonth(), 1);
+  } else {
+    viewMonth = new Date(viewMonth.getFullYear(), viewMonth.getMonth()-1, 1);
+  }
+  renderDashboard();
+});
 document.getElementById("nextMonth").addEventListener("click",()=>{
-  const next = new Date(viewMonth.getFullYear(), viewMonth.getMonth()+1, 1);
-  if(isFutureMonth(next)) return;
-  viewMonth = next; renderDashboard();
+  if(dashPeriod === "year"){
+    if(viewMonth.getFullYear() >= now.getFullYear()) return;
+    viewMonth = new Date(viewMonth.getFullYear()+1, viewMonth.getMonth(), 1);
+  } else {
+    const next = new Date(viewMonth.getFullYear(), viewMonth.getMonth()+1, 1);
+    if(isFutureMonth(next)) return;
+    viewMonth = next;
+  }
+  renderDashboard();
+});
+document.querySelectorAll(".period-btn").forEach(btn=>{
+  btn.addEventListener("click",()=>{
+    dashPeriod = btn.dataset.period;
+    document.querySelectorAll(".period-btn").forEach(b=>b.classList.toggle("active", b===btn));
+    renderDashboard();
+  });
 });
 document.getElementById("prevMonthTx").addEventListener("click",()=>{ txViewMonth = new Date(txViewMonth.getFullYear(), txViewMonth.getMonth()-1, 1); renderTransactions(); });
 document.getElementById("nextMonthTx").addEventListener("click",()=>{

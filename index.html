@@ -207,6 +207,14 @@ a{color:inherit;}
 
 .empty-note{padding:20px 16px;font-size:13.5px;color:var(--ink-faint);text-align:center;line-height:1.6;}
 .empty-note button{color:var(--brass-deep);text-decoration:underline;font-weight:500;}
+.freq-btn{flex:1;padding:8px;border-radius:8px;font-size:13.5px;font-weight:600;color:var(--ink-soft);}
+.freq-btn.active{background:var(--ink);color:var(--paper);}
+.freq-row{padding:11px 16px;border-bottom:1px solid var(--rule-soft);display:flex;align-items:center;gap:12px;}
+.freq-row:last-child{border-bottom:none;}
+.freq-row .flabel{font-size:13px;color:var(--ink-soft);min-width:96px;font-family:var(--mono);}
+.freq-row .fbar-track{flex:1;height:6px;border-radius:4px;background:var(--rule);overflow:hidden;}
+.freq-row .fbar-fill{height:100%;border-radius:4px;background:var(--brass);}
+.freq-row .fcount{font-family:var(--mono);font-size:13px;font-weight:600;color:var(--ink);min-width:20px;text-align:right;}
 
 /* transactions */
 .tx-toolbar{display:flex;gap:8px;margin-bottom:14px;}
@@ -411,6 +419,16 @@ input[type=file]{display:none;}
   <div class="section">
     <div class="section-head"><h2>Goals</h2></div>
     <div class="card-list" id="goalsList"></div>
+  </div>
+
+  <div class="section">
+    <div class="section-head"><h2>Outgoing transactions</h2><span class="hint" id="freqHint"></span></div>
+    <div class="type-toggle" style="max-width:260px;margin-bottom:10px;">
+      <button type="button" class="freq-btn" data-freq="daily">Daily</button>
+      <button type="button" class="freq-btn active" data-freq="weekly">Weekly</button>
+      <button type="button" class="freq-btn" data-freq="monthly">Monthly</button>
+    </div>
+    <div class="card-list" id="freqList"></div>
   </div>
 </div>
 
@@ -805,6 +823,83 @@ function renderDashboard(){
 
   renderBudgetList(g.budget);
   renderGoalsList(g.savings);
+  renderTxFrequency();
+}
+
+/* ---------- outgoing transaction frequency ---------- */
+let txFreq = "weekly";
+function localISO(d){
+  return d.getFullYear() + "-" + String(d.getMonth()+1).padStart(2,"0") + "-" + String(d.getDate()).padStart(2,"0");
+}
+function periodBounds(d, period){
+  if(period === "year"){
+    return { start: new Date(d.getFullYear(),0,1), end: new Date(d.getFullYear(),11,31) };
+  }
+  return { start: new Date(d.getFullYear(), d.getMonth(), 1), end: new Date(d.getFullYear(), d.getMonth()+1, 0) };
+}
+function bucketKeyLabel(d, granularity){
+  if(granularity === "monthly"){
+    const key = d.getFullYear() + "-" + String(d.getMonth()+1).padStart(2,"0");
+    const label = d.toLocaleDateString(undefined,{month:"short",year:"numeric"});
+    return {key, label};
+  }
+  if(granularity === "weekly"){
+    const start = new Date(d);
+    start.setDate(start.getDate() - start.getDay());
+    const key = localISO(start);
+    const label = start.toLocaleDateString(undefined,{month:"short",day:"numeric"});
+    return {key, label: "Wk of " + label};
+  }
+  const key = localISO(d);
+  const label = d.toLocaleDateString(undefined,{weekday:"short",month:"short",day:"numeric"});
+  return {key, label};
+}
+function buildBuckets(expenseTx, granularity, boundStart, boundEnd){
+  const counts = {};
+  const meta = {};
+  expenseTx.forEach(t=>{
+    const parts = t.date.split("-").map(Number);
+    const d = new Date(parts[0], parts[1]-1, parts[2]);
+    const {key, label} = bucketKeyLabel(d, granularity);
+    counts[key] = (counts[key]||0) + 1;
+    meta[key] = label;
+  });
+  const cursorEnd = new Date(Math.min(boundEnd.getTime(), now.getTime()));
+  const cursor = new Date(boundStart);
+  while(cursor <= cursorEnd){
+    const {key, label} = bucketKeyLabel(cursor, granularity);
+    if(!(key in counts)){ counts[key] = 0; meta[key] = label; }
+    cursor.setDate(cursor.getDate()+1);
+  }
+  const keys = Object.keys(counts).sort().reverse();
+  return {keys, counts, meta};
+}
+function renderTxFrequency(){
+  const wrap = document.getElementById("freqList");
+  const hint = document.getElementById("freqHint");
+  const {start, end} = periodBounds(viewMonth, dashPeriod);
+  const periodTx = txForPeriod(viewMonth, dashPeriod);
+  const expenseTx = periodTx.filter(t=>t.type === "expense");
+  if(expenseTx.length===0){
+    hint.textContent = "";
+    wrap.innerHTML = '<div class="empty-note">No outgoing transactions in this period yet.</div>';
+    return;
+  }
+  const {keys, counts, meta} = buildBuckets(expenseTx, txFreq, start, end);
+  const total = expenseTx.length;
+  const avg = keys.length ? (total / keys.length) : 0;
+  const unit = txFreq === "daily" ? "day" : (txFreq === "weekly" ? "week" : "month");
+  hint.textContent = total + " outgoing · avg " + avg.toFixed(1) + " per " + unit;
+  const maxCount = Math.max(1, ...keys.map(k=>counts[k]));
+  wrap.innerHTML = keys.map(k=>{
+    const c = counts[k];
+    const pct = (c / maxCount) * 100;
+    return `<div class="freq-row">
+      <span class="flabel">${escapeHtml(meta[k])}</span>
+      <div class="fbar-track"><div class="fbar-fill" style="width:${pct}%"></div></div>
+      <span class="fcount">${c}</span>
+    </div>`;
+  }).join("");
 }
 
 function overallNoteText(g){
@@ -1695,6 +1790,13 @@ document.querySelectorAll(".period-btn").forEach(btn=>{
     dashPeriod = btn.dataset.period;
     document.querySelectorAll(".period-btn").forEach(b=>b.classList.toggle("active", b===btn));
     renderDashboard();
+  });
+});
+document.querySelectorAll(".freq-btn").forEach(btn=>{
+  btn.addEventListener("click",()=>{
+    txFreq = btn.dataset.freq;
+    document.querySelectorAll(".freq-btn").forEach(b=>b.classList.toggle("active", b===btn));
+    renderTxFrequency();
   });
 });
 document.getElementById("prevMonthTx").addEventListener("click",()=>{ txViewMonth = new Date(txViewMonth.getFullYear(), txViewMonth.getMonth()-1, 1); renderTransactions(); });

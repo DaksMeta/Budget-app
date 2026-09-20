@@ -512,6 +512,14 @@ input[type=file]{display:none;}
     </div>
     <input type="file" id="restoreFile" accept="application/json">
     <button class="btn danger" id="resetBtn" style="margin-top:10px;width:100%;justify-content:center;">Erase all data</button>
+
+    <div class="field" style="margin-top:18px;">
+      <label>Remove a bad import (delete all transactions dated in one year)</label>
+      <div class="field-row">
+        <input type="number" id="wipeYear" placeholder="e.g. 2026" style="flex:1;padding:11px 12px;border-radius:10px;border:1px solid var(--rule);background:var(--paper);font-size:15px;">
+        <button class="btn danger" id="wipeYearBtn" style="flex:1;justify-content:center;">Delete that year</button>
+      </div>
+    </div>
   </div>
 
 </div>
@@ -1095,11 +1103,35 @@ async function extractPdfRows(file){
     });
   }
   const scanWarn = totalChars < 200;
-  const rows = parseStatementLines(lines);
+  const fallbackYear = inferStatementYear(lines, file.name);
+  const rows = parseStatementLines(lines, fallbackYear);
   return {rows, scanWarn};
 }
 
-function parseStatementLines(lines){
+/* Figures out which calendar year a statement covers, for date lines that omit the year
+   (e.g. "01/15" with no "/2025"). Prefers years actually printed in the document — the
+   statement period line, or full transaction dates elsewhere on the page — over the
+   filename, and only falls back to today's year if nothing else is found. */
+function inferStatementYear(lines, filename){
+  const yearCounts = {};
+  const bump = (y)=>{ yearCounts[y] = (yearCounts[y]||0) + 1; };
+  const numDateRe = /\b\d{1,2}[\/\-]\d{1,2}[\/\-](\d{4})\b/g;
+  const monthNameRe = /\b(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Sept|Oct|Nov|Dec)[a-z]*\.?\s+\d{1,2},?\s+(\d{4})\b/gi;
+  lines.forEach(line=>{
+    let m;
+    while((m = numDateRe.exec(line))) bump(m[1]);
+    while((m = monthNameRe.exec(line))) bump(m[1]);
+  });
+  const found = Object.keys(yearCounts).sort((a,b)=>yearCounts[b]-yearCounts[a]);
+  if(found.length) return Number(found[0]);
+
+  const fnMatch = filename && filename.match(/(20\d{2})/);
+  if(fnMatch) return Number(fnMatch[1]);
+
+  return now.getFullYear();
+}
+
+function parseStatementLines(lines, fallbackYear){
   const dateRe = /^\s*(\d{1,2}[\/\-]\d{1,2}(?:[\/\-]\d{2,4})?|(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Sept|Oct|Nov|Dec)[a-z]*\.?\s+\d{1,2}(?:,?\s*\d{2,4})?)\b/i;
   const moneyRe = /\(?-?\$?\d{1,3}(?:,\d{3})*\.\d{2}\)?/g;
   const skipDescRe = /balance|^total\b|subtotal|statement period|page \d+ of \d+|interest rate|available credit/i;
@@ -1127,7 +1159,7 @@ function parseStatementLines(lines){
     if(skipDescRe.test(desc) || skipDescRe.test(line)) return;
     if(!desc) desc = "Imported";
 
-    const dateVal = parseStatementDate(dm[0]);
+    const dateVal = parseStatementDate(dm[0], fallbackYear);
     if(!dateVal) return;
 
     let type = isNeg ? "expense" : (section || "expense");
@@ -1137,9 +1169,9 @@ function parseStatementLines(lines){
   return rows;
 }
 
-function parseStatementDate(raw){
+function parseStatementDate(raw, fallbackYear){
   raw = raw.trim();
-  const nowY = now.getFullYear();
+  const nowY = fallbackYear || now.getFullYear();
   let m = raw.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})$/);
   if(m){
     let [_, mo, da, yr] = m;
@@ -1582,6 +1614,18 @@ document.getElementById("restoreFile").addEventListener("change",(e)=>{
 document.getElementById("resetBtn").addEventListener("click",()=>{
   if(confirm("Erase all budgets, goals, and transactions? This can't be undone.")){
     data = defaultData(); save(); renderAll(); showToast("All data erased");
+  }
+});
+document.getElementById("wipeYearBtn").addEventListener("click",()=>{
+  const y = document.getElementById("wipeYear").value.trim();
+  if(!/^\d{4}$/.test(y)){ showToast("Enter a 4-digit year"); return; }
+  const count = data.transactions.filter(t=>t.date.slice(0,4)===y).length;
+  if(count===0){ showToast("No transactions dated in " + y); return; }
+  if(confirm(`Delete all ${count} transaction${count===1?"":"s"} dated in ${y}? This can't be undone.`)){
+    data.transactions = data.transactions.filter(t=>t.date.slice(0,4)!==y);
+    save(); renderAll();
+    document.getElementById("wipeYear").value = "";
+    showToast(count + " transaction" + (count===1?"":"s") + " removed");
   }
 });
 

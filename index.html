@@ -300,6 +300,27 @@ input[type=file]{display:none;}
 .import-summary button{font-size:12px;font-weight:600;color:var(--brass-deep);}
 .import-rows-wrap{max-height:46vh;overflow-y:auto;}
 
+/* taxes */
+.tax-total{font-family:var(--serif);font-size:56px;line-height:1;font-weight:600;margin:6px 0 2px;color:var(--brass-deep);}
+.tax-cat-row{padding:13px 16px;border-bottom:1px solid var(--rule-soft);}
+.tax-cat-row:last-child{border-bottom:none;}
+.tax-cat-row .top{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:7px;}
+.tax-cat-row .name{font-size:14px;font-weight:500;}
+.tax-cat-row .amt{font-family:var(--mono);font-size:13px;color:var(--ink-soft);}
+.tax-tx-day{padding:8px 16px 4px;font-size:11.5px;color:var(--ink-faint);font-family:var(--mono);letter-spacing:0.3px;}
+.tax-tx-row{padding:11px 16px;border-bottom:1px solid var(--rule-soft);display:flex;gap:10px;align-items:center;}
+.tax-tx-row:last-child{border-bottom:none;}
+.tax-tx-row .mid{flex:1;min-width:0;}
+.tax-tx-row .desc{font-size:13.5px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.tax-tx-row .sub{font-size:11.5px;color:var(--ink-faint);margin-top:1px;}
+.tax-tx-row .amt{font-family:var(--mono);font-size:13px;color:var(--ink-soft);white-space:nowrap;min-width:64px;text-align:right;}
+.tax-tx-row select.itaxcat{width:132px;flex-shrink:0;border:none;background:var(--paper);border-radius:8px;font-size:11.5px;color:var(--ink-soft);padding:6px 8px;}
+.tax-tx-row.tagged select.itaxcat{background:var(--a-bg);color:var(--a-color);font-weight:600;}
+.tax-cat-edit-row{display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--rule-soft);}
+.tax-cat-edit-row:last-child{border-bottom:none;}
+.tax-cat-edit-row input{flex:1;border:none;background:none;font-size:14px;font-weight:500;padding:4px 0;}
+.tax-cat-edit-row .rm{color:var(--ink-faint);font-size:17px;padding:2px 4px;}
+
 /* bottom nav */
 .tabbar{
   position:fixed;bottom:0;left:0;right:0;
@@ -400,8 +421,37 @@ input[type=file]{display:none;}
     <button class="btn grow" id="importBtn">Import statement</button>
     <button class="btn grow" id="exportCsvBtn">Export CSV</button>
   </div>
-  <input type="file" id="csvFile" accept=".csv,.pdf,text/csv,application/pdf">
+  <input type="file" id="csvFile" accept=".csv,.pdf,text/csv,application/pdf" multiple>
   <div class="card-list" id="txList"></div>
+</div>
+
+<!-- TAXES -->
+<div class="view hidden" id="view-taxes">
+  <div class="month-switch">
+    <button id="prevYearTax" aria-label="Previous year">‹</button>
+    <div class="label" id="yearLabelTax">—</div>
+    <button id="nextYearTax" aria-label="Next year">›</button>
+  </div>
+
+  <div class="hero" style="margin-bottom:16px;">
+    <div class="eyebrow">Marked as deductible</div>
+    <div class="tax-total" id="taxTotal">$0.00</div>
+    <div class="grade-note" id="taxTotalNote">Tag transactions below as you go through the year.</div>
+  </div>
+
+  <div class="section">
+    <div class="section-head"><h2>By write-off category</h2></div>
+    <div class="card-list" id="taxBreakdown"></div>
+  </div>
+
+  <div class="tx-toolbar">
+    <button class="btn grow" id="exportTaxBtn">Export tax summary</button>
+  </div>
+
+  <div class="section">
+    <div class="section-head"><h2>Tag transactions</h2><span class="hint" id="taxUntaggedHint"></span></div>
+    <div class="card-list" id="taxTxList"></div>
+  </div>
 </div>
 
 <!-- SETUP -->
@@ -418,6 +468,13 @@ input[type=file]{display:none;}
     <div class="desc">A monthly spending limit per category. Leave the limit blank for categories you're just tracking, not budgeting.</div>
     <div class="card-list" id="catEditList"></div>
     <button class="btn" id="addCatBtn" style="margin-top:10px;width:100%;justify-content:center;">+ Add category</button>
+  </div>
+
+  <div class="setup-block">
+    <h2>Tax write-off categories</h2>
+    <div class="desc">The list you'll tag deductible transactions with on the Taxes tab. Edit these to match what your accountant or tax software expects.</div>
+    <div class="card-list" id="taxCatEditList"></div>
+    <button class="btn" id="addTaxCatBtn" style="margin-top:10px;width:100%;justify-content:center;">+ Add category</button>
   </div>
 
   <div class="setup-block">
@@ -467,6 +524,10 @@ input[type=file]{display:none;}
   <button class="tab-btn" data-view="transactions">
     <svg viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h10"/></svg>
     Transactions
+  </button>
+  <button class="tab-btn" data-view="taxes">
+    <svg viewBox="0 0 24 24"><path d="M6 3h9l5 5v13a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1Z"/><path d="M14 3v5h5"/><path d="M8.5 13.5a1.8 1.8 0 0 1 1.8-1.5h1.4a1.8 1.8 0 0 1 0 3.6h-1.4a1.8 1.8 0 0 0 0 3.6h1.4a1.8 1.8 0 0 0 1.8-1.5"/><path d="M11 10.5v1M11 18.5v1"/></svg>
+    Taxes
   </button>
   <button class="tab-btn" data-view="setup">
     <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .34 1.87l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.7 1.7 0 0 0-1.87-.34 1.7 1.7 0 0 0-1 1.55V21a2 2 0 0 1-4 0v-.09A1.7 1.7 0 0 0 9 19.4a1.7 1.7 0 0 0-1.87.34l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.7 1.7 0 0 0 4.6 15a1.7 1.7 0 0 0-1.55-1H3a2 2 0 0 1 0-4h.09A1.7 1.7 0 0 0 4.6 9a1.7 1.7 0 0 0-.34-1.87l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.7 1.7 0 0 0 9 4.6a1.7 1.7 0 0 0 1-1.55V3a2 2 0 0 1 4 0v.09a1.7 1.7 0 0 0 1 1.55 1.7 1.7 0 0 0 1.87-.34l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.7 1.7 0 0 0 19.4 9a1.7 1.7 0 0 0 1.55 1H21a2 2 0 0 1 0 4h-.09a1.7 1.7 0 0 0-1.55 1Z"/></svg>
@@ -535,6 +596,11 @@ function defaultData(){
     goals: [],
     transactions: [],
     weights: {budget: 33, savings: 33, income: 34},
+    taxCategories: [
+      "Home office", "Vehicle & mileage", "Travel", "Meals (business)",
+      "Supplies & equipment", "Software & subscriptions", "Professional services",
+      "Education & training", "Insurance", "Charitable donations", "Medical & health", "Other deductible"
+    ],
     createdAt: todayISO()
   };
 }
@@ -889,26 +955,49 @@ document.getElementById("fabAdd").addEventListener("click",()=>openTxSheet(null)
 /* ---------- statement import (CSV + PDF) ---------- */
 document.getElementById("importBtn").addEventListener("click",()=>document.getElementById("csvFile").click());
 document.getElementById("csvFile").addEventListener("change",(e)=>{
-  const file = e.target.files[0];
-  if(!file) return;
-  const isPdf = /\.pdf$/i.test(file.name) || file.type === "application/pdf";
-  if(isPdf){
-    handlePdfImport(file);
-  } else {
-    const reader = new FileReader();
-    reader.onload = ()=>{
-      try{
-        const rows = parseCsvToRows(reader.result);
-        if(rows.length===0){ showToast("No transactions found in that file"); return; }
-        openImportPreview(rows, {scanWarn:false, sourceLabel: file.name});
-      }catch(err){
-        showToast("Couldn't read that file");
-      }
-    };
-    reader.readAsText(file);
-  }
+  const files = Array.from(e.target.files || []);
   e.target.value = "";
+  if(files.length===0) return;
+  handleImportFiles(files);
 });
+
+function readFileAsText(file){
+  return new Promise((resolve, reject)=>{
+    const reader = new FileReader();
+    reader.onload = ()=>resolve(reader.result);
+    reader.onerror = ()=>reject(reader.error);
+    reader.readAsText(file);
+  });
+}
+
+async function handleImportFiles(files){
+  if(files.length > 1) showToast("Reading " + files.length + " files…");
+  let allRows = [];
+  let anyScanWarn = false;
+  let failed = [];
+  for(const file of files){
+    const isPdf = /\.pdf$/i.test(file.name) || file.type === "application/pdf";
+    try{
+      if(isPdf){
+        const {rows, scanWarn} = await extractPdfRows(file);
+        if(scanWarn) anyScanWarn = true;
+        allRows = allRows.concat(rows);
+      } else {
+        const text = await readFileAsText(file);
+        allRows = allRows.concat(parseCsvToRows(text));
+      }
+    }catch(err){
+      failed.push(file.name);
+    }
+  }
+  if(allRows.length===0){
+    showToast(failed.length ? "Couldn't read " + (failed.length===1?"that file":"those files") : "No transactions found");
+    return;
+  }
+  const label = files.length===1 ? files[0].name : files.length + " files";
+  openImportPreview(allRows, {scanWarn: anyScanWarn, sourceLabel: label});
+  if(failed.length) showToast("Couldn't read " + failed.length + " file" + (failed.length===1?"":"s") + " — the rest were included");
+}
 
 const CATEGORY_HINTS = [
   [/grocery|groceries|walmart|kroger|trader joe|whole foods|safeway|aldi\b|publix|supermarket/i, "Groceries"],
@@ -965,45 +1054,39 @@ function parseCsvToRows(text){
 }
 
 /* -- PDF: extract text, reconstruct lines, parse transaction-shaped rows -- */
-async function handlePdfImport(file){
+let pdfWorkerConfigured = false;
+async function extractPdfRows(file){
   if(typeof pdfjsLib === "undefined"){
-    showToast("PDF reading isn't ready yet — try again in a moment");
-    return;
+    throw new Error("pdfjs not loaded");
   }
-  pdfjsLib.GlobalWorkerOptions.workerSrc = "vendor/pdf.worker.min.js";
-  showToast("Reading " + file.name + "…");
-  try{
-    const buf = await file.arrayBuffer();
-    const pdf = await pdfjsLib.getDocument({data: buf}).promise;
-    let lines = [];
-    let totalChars = 0;
-    for(let p=1; p<=pdf.numPages; p++){
-      const page = await pdf.getPage(p);
-      const content = await page.getTextContent();
-      totalChars += content.items.reduce((s,it)=>s+(it.str||"").length,0);
-      const groups = {};
-      content.items.forEach(it=>{
-        if(!it.str || !it.str.trim()) return;
-        const y = Math.round(it.transform[5]);
-        if(!groups[y]) groups[y] = [];
-        groups[y].push(it);
-      });
-      const ys = Object.keys(groups).map(Number).sort((a,b)=>b-a);
-      ys.forEach(y=>{
-        const lineText = groups[y].sort((a,b)=>a.transform[4]-b.transform[4]).map(it=>it.str).join(" ").replace(/\s{2,}/g," ").trim();
-        if(lineText) lines.push(lineText);
-      });
-    }
-    const scanWarn = totalChars < 200;
-    const rows = parseStatementLines(lines);
-    if(rows.length===0){
-      showToast(scanWarn ? "No readable text found — this looks like a scanned statement" : "Couldn't find any transaction lines in that file");
-      return;
-    }
-    openImportPreview(rows, {scanWarn, sourceLabel: file.name});
-  }catch(err){
-    showToast("Couldn't read that PDF");
+  if(!pdfWorkerConfigured){
+    pdfjsLib.GlobalWorkerOptions.workerSrc = "vendor/pdf.worker.min.js";
+    pdfWorkerConfigured = true;
   }
+  const buf = await file.arrayBuffer();
+  const pdf = await pdfjsLib.getDocument({data: buf}).promise;
+  let lines = [];
+  let totalChars = 0;
+  for(let p=1; p<=pdf.numPages; p++){
+    const page = await pdf.getPage(p);
+    const content = await page.getTextContent();
+    totalChars += content.items.reduce((s,it)=>s+(it.str||"").length,0);
+    const groups = {};
+    content.items.forEach(it=>{
+      if(!it.str || !it.str.trim()) return;
+      const y = Math.round(it.transform[5]);
+      if(!groups[y]) groups[y] = [];
+      groups[y].push(it);
+    });
+    const ys = Object.keys(groups).map(Number).sort((a,b)=>b-a);
+    ys.forEach(y=>{
+      const lineText = groups[y].sort((a,b)=>a.transform[4]-b.transform[4]).map(it=>it.str).join(" ").replace(/\s{2,}/g," ").trim();
+      if(lineText) lines.push(lineText);
+    });
+  }
+  const scanWarn = totalChars < 200;
+  const rows = parseStatementLines(lines);
+  return {rows, scanWarn};
 }
 
 function parseStatementLines(lines){
@@ -1133,6 +1216,133 @@ document.getElementById("importConfirm").addEventListener("click",()=>{
   showToast(count + " transaction" + (count===1?"":"s") + " added");
 });
 
+/* ---------- taxes ---------- */
+let taxYear = now.getFullYear();
+function txForYear(y){
+  return data.transactions.filter(t => t.type==="expense" && t.date.slice(0,4) === String(y));
+}
+function renderTaxes(){
+  document.getElementById("yearLabelTax").textContent = String(taxYear);
+  document.getElementById("nextYearTax").style.visibility = taxYear >= now.getFullYear() ? "hidden" : "visible";
+
+  const yearTx = txForYear(taxYear).slice().sort((a,b)=> b.date.localeCompare(a.date) || (b._seq||0)-(a._seq||0));
+  const tagged = yearTx.filter(t => t.taxCategory);
+  const total = tagged.reduce((s,t)=>s+Number(t.amount),0);
+
+  document.getElementById("taxTotal").textContent = fmtMoney(total);
+  const note = document.getElementById("taxTotalNote");
+  if(yearTx.length===0){
+    note.textContent = "No expenses recorded for " + taxYear + " yet.";
+  } else if(tagged.length===0){
+    note.textContent = yearTx.length + " expense" + (yearTx.length===1?"":"s") + " this year, none tagged yet — start below.";
+  } else {
+    note.textContent = tagged.length + " of " + yearTx.length + " expenses tagged as write-offs.";
+  }
+
+  const byCat = {};
+  tagged.forEach(t=>{ byCat[t.taxCategory] = (byCat[t.taxCategory]||0) + Number(t.amount); });
+  const catNames = Object.keys(byCat).sort((a,b)=>byCat[b]-byCat[a]);
+  const breakdown = document.getElementById("taxBreakdown");
+  if(catNames.length===0){
+    breakdown.innerHTML = '<div class="empty-note">Nothing tagged yet. Assign a write-off category to expenses below and they\'ll total up here.</div>';
+  } else {
+    breakdown.innerHTML = catNames.map(name=>`
+      <div class="tax-cat-row">
+        <div class="top"><span class="name">${escapeHtml(name)}</span><span class="amt">${fmtMoney(byCat[name])}</span></div>
+      </div>
+    `).join("");
+  }
+
+  const untaggedCount = yearTx.length - tagged.length;
+  document.getElementById("taxUntaggedHint").textContent = yearTx.length ? (untaggedCount + " untagged") : "";
+
+  renderTaxTxList(yearTx);
+}
+function renderTaxTxList(yearTx){
+  const wrap = document.getElementById("taxTxList");
+  if(yearTx.length===0){
+    wrap.innerHTML = '<div class="empty-note">No expenses in ' + taxYear + ' yet. Import statements or add transactions first.</div>';
+    return;
+  }
+  const catOptions = ['<option value="">Not deductible</option>'].concat(
+    data.taxCategories.map(name=>`<option value="${escapeHtml(name)}">${escapeHtml(name)}</option>`)
+  ).join("");
+
+  let html = "";
+  let lastDay = null;
+  yearTx.forEach(t=>{
+    if(t.date !== lastDay){
+      lastDay = t.date;
+      const dObj = new Date(t.date+"T00:00:00");
+      html += `<div class="tax-tx-day">${dObj.toLocaleDateString(undefined,{month:"short",day:"numeric"})}</div>`;
+    }
+    html += `<div class="tax-tx-row ${t.taxCategory?'tagged':''}" data-id="${t.id}">
+      <div class="mid">
+        <div class="desc">${escapeHtml(t.desc || "(no description)")}</div>
+        <div class="sub">${escapeHtml(t.category || "Uncategorized")}</div>
+      </div>
+      <div class="amt">${fmtMoney(Number(t.amount))}</div>
+      <select class="itaxcat">${catOptions}</select>
+    </div>`;
+  });
+  wrap.innerHTML = html;
+  wrap.querySelectorAll(".tax-tx-row").forEach(row=>{
+    const id = row.getAttribute("data-id");
+    const t = data.transactions.find(x=>x.id===id);
+    const sel = row.querySelector(".itaxcat");
+    sel.value = t.taxCategory || "";
+    sel.addEventListener("change",(e)=>{
+      t.taxCategory = e.target.value || null;
+      save();
+      row.classList.toggle("tagged", !!t.taxCategory);
+      renderTaxesSummaryOnly();
+    });
+  });
+}
+function renderTaxesSummaryOnly(){
+  const yearTx = txForYear(taxYear);
+  const tagged = yearTx.filter(t => t.taxCategory);
+  const total = tagged.reduce((s,t)=>s+Number(t.amount),0);
+  document.getElementById("taxTotal").textContent = fmtMoney(total);
+  document.getElementById("taxTotalNote").textContent = tagged.length + " of " + yearTx.length + " expenses tagged as write-offs.";
+  const byCat = {};
+  tagged.forEach(t=>{ byCat[t.taxCategory] = (byCat[t.taxCategory]||0) + Number(t.amount); });
+  const catNames = Object.keys(byCat).sort((a,b)=>byCat[b]-byCat[a]);
+  const breakdown = document.getElementById("taxBreakdown");
+  breakdown.innerHTML = catNames.length===0
+    ? '<div class="empty-note">Nothing tagged yet. Assign a write-off category to expenses below and they\'ll total up here.</div>'
+    : catNames.map(name=>`<div class="tax-cat-row"><div class="top"><span class="name">${escapeHtml(name)}</span><span class="amt">${fmtMoney(byCat[name])}</span></div></div>`).join("");
+  document.getElementById("taxUntaggedHint").textContent = yearTx.length ? ((yearTx.length-tagged.length) + " untagged") : "";
+}
+document.getElementById("prevYearTax").addEventListener("click",()=>{ taxYear--; renderTaxes(); });
+document.getElementById("nextYearTax").addEventListener("click",()=>{
+  if(taxYear >= now.getFullYear()) return;
+  taxYear++; renderTaxes();
+});
+document.getElementById("exportTaxBtn").addEventListener("click",()=>{
+  const tagged = txForYear(taxYear).filter(t=>t.taxCategory).slice().sort((a,b)=>{
+    const c = a.taxCategory.localeCompare(b.taxCategory);
+    return c !== 0 ? c : a.date.localeCompare(b.date);
+  });
+  if(tagged.length===0){ showToast("Nothing tagged for " + taxYear + " yet"); return; }
+  const rows = [["Date","Description","Budget Category","Write-off Category","Amount"]];
+  let currentCat = null, catSubtotal = 0, grandTotal = 0;
+  tagged.forEach(t=>{
+    if(currentCat !== null && t.taxCategory !== currentCat){
+      rows.push(["", "", "", currentCat + " subtotal", catSubtotal.toFixed(2)]);
+      catSubtotal = 0;
+    }
+    currentCat = t.taxCategory;
+    rows.push([t.date, t.desc||"", t.category||"", t.taxCategory, Number(t.amount).toFixed(2)]);
+    catSubtotal += Number(t.amount);
+    grandTotal += Number(t.amount);
+  });
+  if(currentCat !== null) rows.push(["", "", "", currentCat + " subtotal", catSubtotal.toFixed(2)]);
+  rows.push(["", "", "", "TOTAL", grandTotal.toFixed(2)]);
+  const csv = rows.map(r=>r.map(csvEscape).join(",")).join("\n");
+  downloadFile(csv, "ledger-tax-writeoffs-" + taxYear + ".csv", "text/csv");
+});
+
 function parseCsvLine(line){
   const out = []; let cur=""; let inQ=false;
   for(let i=0;i<line.length;i++){
@@ -1192,6 +1402,7 @@ function downloadFile(content, filename, mime){
 function renderSetup(){
   document.getElementById("incomeTarget").value = data.incomeTarget || "";
   renderCatEdit();
+  renderTaxCatEdit();
   renderGoalEdit();
   const w = data.weights;
   document.getElementById("wBudget").value = w.budget;
@@ -1238,6 +1449,42 @@ function renderCatEdit(){
 }
 document.getElementById("addCatBtn").addEventListener("click",()=>{
   data.categories.push({id:uid(), name:"New category", limit:null});
+  save(); renderSetup();
+});
+
+function renderTaxCatEdit(){
+  const wrap = document.getElementById("taxCatEditList");
+  if(data.taxCategories.length===0){
+    wrap.innerHTML = '<div class="empty-note">No tax categories yet.</div>';
+    return;
+  }
+  wrap.innerHTML = data.taxCategories.map((name,i)=>`
+    <div class="tax-cat-edit-row" data-i="${i}">
+      <input value="${escapeHtml(name)}" placeholder="Category name">
+      <button class="rm" data-rmtaxcat="${i}" aria-label="Remove">×</button>
+    </div>
+  `).join("");
+  wrap.querySelectorAll(".tax-cat-edit-row").forEach(row=>{
+    const i = Number(row.getAttribute("data-i"));
+    const oldName = data.taxCategories[i];
+    row.querySelector("input").addEventListener("change",(e)=>{
+      const newName = e.target.value.trim();
+      if(!newName){ e.target.value = oldName; return; }
+      data.transactions.forEach(t=>{ if(t.taxCategory===oldName) t.taxCategory=newName; });
+      data.taxCategories[i] = newName;
+      save(); renderAll();
+    });
+  });
+  wrap.querySelectorAll("[data-rmtaxcat]").forEach(btn=>{
+    btn.addEventListener("click",()=>{
+      const i = Number(btn.getAttribute("data-rmtaxcat"));
+      data.taxCategories.splice(i,1);
+      save(); renderSetup();
+    });
+  });
+}
+document.getElementById("addTaxCatBtn").addEventListener("click",()=>{
+  data.taxCategories.push("New category");
   save(); renderSetup();
 });
 
@@ -1334,8 +1581,9 @@ function switchTab(name){
   document.querySelectorAll(".view").forEach(v=>v.classList.add("hidden"));
   document.getElementById("view-"+name).classList.remove("hidden");
   document.querySelectorAll(".tab-btn").forEach(b=>b.classList.toggle("active", b.dataset.view===name));
-  document.getElementById("fabAdd").style.display = name==="setup" ? "none" : "flex";
+  document.getElementById("fabAdd").style.display = (name==="setup" || name==="taxes") ? "none" : "flex";
   if(name==="setup") renderSetup();
+  if(name==="taxes") renderTaxes();
 }
 document.querySelectorAll(".tab-btn").forEach(btn=>{
   btn.addEventListener("click",()=>switchTab(btn.dataset.view));
@@ -1370,6 +1618,7 @@ function renderAll(){
   renderDashboard();
   renderTransactions();
   if(currentTab==="setup") renderSetup();
+  if(currentTab==="taxes") renderTaxes();
 }
 document.getElementById("todayLabel").textContent = now.toLocaleDateString(undefined,{weekday:"short",month:"short",day:"numeric"});
 renderAll();

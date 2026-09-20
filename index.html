@@ -421,7 +421,9 @@ input[type=file]{display:none;}
     <button class="btn grow" id="importBtn">Import statement</button>
     <button class="btn grow" id="exportCsvBtn">Export CSV</button>
   </div>
+  <button class="btn ghost" id="importFolderBtn" style="width:100%;justify-content:center;margin-bottom:14px;font-weight:500;color:var(--ink-faint);">or choose a whole folder</button>
   <input type="file" id="csvFile" accept=".csv,.pdf,text/csv,application/pdf" multiple>
+  <input type="file" id="folderFile" webkitdirectory directory multiple>
   <div class="card-list" id="txList"></div>
 </div>
 
@@ -958,6 +960,14 @@ document.getElementById("csvFile").addEventListener("change",(e)=>{
   const files = Array.from(e.target.files || []);
   e.target.value = "";
   if(files.length===0) return;
+  handleImportFiles(files);
+});
+document.getElementById("importFolderBtn").addEventListener("click",()=>document.getElementById("folderFile").click());
+document.getElementById("folderFile").addEventListener("change",(e)=>{
+  const all = Array.from(e.target.files || []);
+  e.target.value = "";
+  const files = all.filter(f=>/\.(csv|pdf)$/i.test(f.name));
+  if(files.length===0){ showToast(all.length ? "No CSV or PDF files found in that folder" : "No files found"); return; }
   handleImportFiles(files);
 });
 

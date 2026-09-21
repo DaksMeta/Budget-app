@@ -443,7 +443,8 @@ input[type=file]{display:none;}
     <button class="btn grow" id="importBtn">Import statement</button>
     <button class="btn grow" id="exportCsvBtn">Export CSV</button>
   </div>
-  <button class="btn ghost" id="importFolderBtn" style="width:100%;justify-content:center;margin-bottom:14px;font-weight:500;color:var(--ink-faint);">or choose a whole folder</button>
+  <button class="btn ghost" id="importFolderBtn" style="width:100%;justify-content:center;margin-bottom:6px;font-weight:500;color:var(--ink-faint);">or choose a whole folder</button>
+  <button class="btn ghost" id="autoCatBtn" style="width:100%;justify-content:center;margin-bottom:14px;font-weight:500;color:var(--ink-faint);">Auto-categorize transactions</button>
   <input type="file" id="csvFile" accept=".csv,.pdf,text/csv,application/pdf" multiple>
   <input type="file" id="folderFile" webkitdirectory directory multiple>
   <div class="card-list" id="txList"></div>
@@ -1093,6 +1094,21 @@ document.getElementById("csvFile").addEventListener("change",(e)=>{
   handleImportFiles(files);
 });
 document.getElementById("importFolderBtn").addEventListener("click",()=>document.getElementById("folderFile").click());
+document.getElementById("autoCatBtn").addEventListener("click",()=>{
+  let count = 0;
+  data.transactions.forEach(t=>{
+    if(t.type !== "expense") return;
+    if(t.category && t.category !== "Uncategorized") return;
+    const guess = guessCategory(t.desc);
+    if(!guess) return;
+    ensureCategoryExists(guess);
+    t.category = guess;
+    count++;
+  });
+  if(count === 0){ showToast("No matches found for uncategorized transactions"); return; }
+  save(); renderAll();
+  showToast("Categorized " + count + " transaction" + (count===1?"":"s"));
+});
 document.getElementById("folderFile").addEventListener("change",(e)=>{
   const all = Array.from(e.target.files || []);
   e.target.value = "";
@@ -1140,17 +1156,40 @@ async function handleImportFiles(files){
 }
 
 const CATEGORY_HINTS = [
-  [/grocery|groceries|walmart|kroger|trader joe|whole foods|safeway|aldi\b|publix|supermarket/i, "Groceries"],
-  [/restaurant|cafe|coffee|starbucks|mcdonald|chipotle|doordash|uber\s?eats|grubhub|pizza|bar\b|diner/i, "Dining out"],
-  [/uber\b|lyft|shell\b|chevron|exxon|gas station|parking|transit|metro|conoco|marathon\spetrol/i, "Transport"],
-  [/netflix|spotify|hulu|disney\+|subscription|amazon prime|apple\.com\/bill|icloud|patreon/i, "Subscriptions"],
+  [/grocery|groceries|walmart|kroger|trader joe|whole foods|safeway|aldi\b|publix|supermarket|costco|sam'?s club|food lion|h-?e-?b\b|winco|sprouts|wegmans|meijer/i, "Groceries"],
+  [/restaurant|cafe|coffee|starbucks|dunkin|mcdonald|wendy|burger king|chipotle|doordash|uber\s?eats|grubhub|postmates|pizza|taco|diner|deli\b|bakery|panera|chick-?fil-?a|subway\b|sushi|bar\s*&|\bgrill\b|steakhouse/i, "Dining out"],
+  [/\buber\b(?!\s?eats)|\blyft\b|shell\b|chevron|exxon|\bbp\b|gas station|conoco|marathon\spetrol|citgo|speedway|circle k|texaco|76\s?gas|valero/i, "Transport"],
+  [/parking|\btoll\b|transit|metro\b|\bmta\b|\bcta\b|septa|bart\b|amtrak/i, "Transport"],
+  [/netflix|spotify|hulu|disney\+|max\.com|hbo|paramount\+|peacock|youtube premium|apple\.com\/bill|apple\s?tv|icloud|patreon|audible|kindle unlimited|xbox|playstation network|nintendo/i, "Subscriptions"],
+  [/electric|\bpg&e\b|con\s?edison|duke energy|\bgas\s?&\s?electric|water\s?(bill|utility)|utility|sewer|waste\s?management|garbage/i, "Utilities"],
+  [/\bcomcast\b|xfinity|spectrum|\bat&t\b|verizon|t-mobile|\bcox\b|internet\s?bill|broadband/i, "Phone & internet"],
+  [/rent\b|landlord|property\s?mgmt|apartments?\b/i, "Rent"],
+  [/mortgage|escrow/i, "Mortgage"],
+  [/insurance|geico|progressive|state\s?farm|allstate|liberty\s?mutual/i, "Insurance"],
+  [/pharmacy|cvs\b|walgreens|rite\s?aid|urgent\s?care|clinic|medical|dr\.\s|doctor|dentist|orthodont|hospital|copay/i, "Healthcare"],
+  [/gym\b|fitness|planet\s?fitness|equinox|crossfit|peloton|yoga/i, "Fitness"],
+  [/movie|cinema|amc\b|regal\b|theater|theatre|concert|ticketmaster|eventbrite|steam\b|bowling/i, "Entertainment"],
+  [/amazon(?!\s?prime)|target\b|best\s?buy|\bebay\b|etsy|\bikea\b|home\s?depot|lowe'?s|marshalls|tj\s?maxx|ross\b|nordstrom|macy'?s|kohl'?s/i, "Shopping"],
+  [/petco|petsmart|\bvet\b|veterinar|chewy\.com/i, "Pets"],
+  [/daycare|preschool|tuition|childcare|babysit/i, "Childcare"],
+  [/airline|delta\b|united\s?airlines|southwest|american\s?airlines|\bjetblue\b|hotel|marriott|hilton|airbnb|expedia|\bvrbo\b/i, "Travel"],
+  [/atm\s?fee|overdraft|nsf\s?fee|maintenance\s?fee|service\s?charge|late\s?fee|finance\s?charge/i, "Bank fees"],
+  [/donation|charity|\bgofundme\b|red\s?cross/i, "Donations"],
+  [/salon|barber|spa\b|haircut|nail\s?salon/i, "Personal care"],
+  [/\bshell\b|jiffy\s?lube|auto\s?zone|advance\s?auto|midas\b|oil\s?change|car\s?wash|dmv\b/i, "Auto & maintenance"],
+  [/venmo|zelle|cash\s?app|paypal transfer/i, "Transfers"],
 ];
 function guessCategory(desc){
-  const catNames = data.categories.map(c=>c.name);
   for(const [re, name] of CATEGORY_HINTS){
-    if(re.test(desc) && catNames.includes(name)) return name;
+    if(re.test(desc)) return name;
   }
   return null;
+}
+function ensureCategoryExists(name){
+  if(!name || name==="Income" || name==="Uncategorized") return;
+  if(!data.categories.some(c=>c.name === name)){
+    data.categories.push({id: uid(), name, limit: null});
+  }
 }
 
 /* -- CSV: parse to preview rows (reuses existing column-detection) -- */
@@ -1373,6 +1412,7 @@ document.getElementById("importConfirm").addEventListener("click",()=>{
   let count = 0;
   importRowsData.forEach((r,i)=>{
     if(!r.checked || !r.date || isNaN(Number(r.amount))) return;
+    if(r.type==="expense") ensureCategoryExists(r.category);
     data.transactions.push({id: uid(), type:r.type, desc:r.desc, amount:Math.abs(Number(r.amount)), date:r.date, category:r.category, _seq: Date.now()+i});
     count++;
   });

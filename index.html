@@ -628,6 +628,7 @@ function defaultData(){
     ],
     goals: [],
     transactions: [],
+    merchantMap: {},
     weights: {budget: 33, savings: 33, income: 34},
     taxCategories: [
       "Home office", "Vehicle & mileage", "Travel", "Meals (business)",
@@ -1081,7 +1082,10 @@ document.getElementById("txSave").addEventListener("click",()=>{
   } else {
     data.transactions.push({id: uid(), type, desc, amount, date: dateVal, category, _seq: Date.now()});
   }
-  save(); closeTxSheet(); renderAll(); showToast("Saved");
+  let learnedCount = 0;
+  if(type==="expense") learnedCount = rememberMerchant(desc, category);
+  save(); closeTxSheet(); renderAll();
+  showToast(learnedCount > 0 ? "Saved — also categorized " + learnedCount + " similar transaction" + (learnedCount===1?"":"s") : "Saved");
 });
 document.getElementById("fabAdd").addEventListener("click",()=>openTxSheet(null));
 
@@ -1099,7 +1103,7 @@ document.getElementById("autoCatBtn").addEventListener("click",()=>{
   data.transactions.forEach(t=>{
     if(t.type !== "expense") return;
     if(t.category && t.category !== "Uncategorized") return;
-    const guess = guessCategory(t.desc);
+    const guess = lookupCategory(t.desc);
     if(!guess) return;
     ensureCategoryExists(guess);
     t.category = guess;
@@ -1192,6 +1196,38 @@ function ensureCategoryExists(name){
   }
 }
 
+/* -- merchant memory: remembers which category a business name maps to -- */
+function normalizeMerchant(desc){
+  return String(desc||"")
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g," ")
+    .replace(/\b\d+\b/g," ")
+    .replace(/\s+/g," ")
+    .trim();
+}
+function lookupCategory(desc){
+  const key = normalizeMerchant(desc);
+  if(key && data.merchantMap && data.merchantMap[key]) return data.merchantMap[key];
+  return guessCategory(desc);
+}
+// Remembers desc -> category, and retroactively applies it to other uncategorized
+// transactions from the same business. Returns how many other rows it updated.
+function rememberMerchant(desc, category){
+  if(!category || category==="Income" || category==="Uncategorized") return 0;
+  const key = normalizeMerchant(desc);
+  if(!key) return 0;
+  if(!data.merchantMap) data.merchantMap = {};
+  data.merchantMap[key] = category;
+  let updated = 0;
+  data.transactions.forEach(t=>{
+    if(t.type !== "expense") return;
+    if(t.desc === desc) return;
+    if((t.category && t.category !== "Uncategorized")) return;
+    if(normalizeMerchant(t.desc) === key){ t.category = category; updated++; }
+  });
+  return updated;
+}
+
 /* -- CSV: parse to preview rows (reuses existing column-detection) -- */
 function parseCsvToRows(text){
   const lines = text.split(/\r\n|\n|\r/).filter(l=>l.trim().length>0);
@@ -1226,7 +1262,7 @@ function parseCsvToRows(text){
     } else continue;
     const desc = idx.desc>=0 ? cols[idx.desc] : "Imported";
     let category = idx.category>=0 && cols[idx.category] ? cols[idx.category] : null;
-    if(!category) category = type==="income" ? "Income" : (guessCategory(desc) || "Uncategorized");
+    if(!category) category = type==="income" ? "Income" : (lookupCategory(desc) || "Uncategorized");
     rows.push({date: dateVal, desc, amount, type, category});
   }
   return rows;
@@ -1324,7 +1360,7 @@ function parseStatementLines(lines, fallbackYear){
     if(!dateVal) return;
 
     let type = isNeg ? "expense" : (section || "expense");
-    const category = type==="income" ? "Income" : (guessCategory(desc) || "Uncategorized");
+    const category = type==="income" ? "Income" : (lookupCategory(desc) || "Uncategorized");
     rows.push({date: dateVal, desc, amount: Math.abs(amountNum), type, category});
   });
   return rows;
@@ -1386,7 +1422,7 @@ function renderImportRows(){
     row.querySelector(".idesc").addEventListener("change",(e)=>{ importRowsData[i].desc = e.target.value.trim(); });
     row.querySelector(".iamt").addEventListener("change",(e)=>{ const v = parseFloat(e.target.value); if(!isNaN(v)) importRowsData[i].amount = Math.abs(v); });
     row.querySelector(".idate").addEventListener("change",(e)=>{ importRowsData[i].date = e.target.value; });
-    row.querySelector(".icat").addEventListener("change",(e)=>{ importRowsData[i].category = e.target.value; });
+    row.querySelector(".icat").addEventListener("change",(e)=>{ importRowsData[i].category = e.target.value; importRowsData[i]._userEdited = true; });
     row.querySelector(".itype").addEventListener("click",(e)=>{
       importRowsData[i].type = importRowsData[i].type==="income" ? "expense" : "income";
       if(importRowsData[i].type==="income") importRowsData[i].category = "Income";
@@ -1414,6 +1450,7 @@ document.getElementById("importConfirm").addEventListener("click",()=>{
     if(!r.checked || !r.date || isNaN(Number(r.amount))) return;
     if(r.type==="expense") ensureCategoryExists(r.category);
     data.transactions.push({id: uid(), type:r.type, desc:r.desc, amount:Math.abs(Number(r.amount)), date:r.date, category:r.category, _seq: Date.now()+i});
+    if(r.type==="expense" && r._userEdited) rememberMerchant(r.desc, r.category);
     count++;
   });
   save(); importSheetBackdrop.classList.remove("open"); renderAll();
